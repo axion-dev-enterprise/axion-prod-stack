@@ -19,8 +19,8 @@ services:
   socket-proxy:
     image: tecnativa/docker-socket-proxy:0.3.0
     restart: unless-stopped
-    mem_limit: ${SOCKET_PROXY_MEM_LIMIT}
-    cpus: ${SOCKET_PROXY_CPUS}
+    mem_limit: ${SOCKET_PROXY_MEM_LIMIT:-64m}
+    cpus: ${SOCKET_PROXY_CPUS:-0.10}
     pids_limit: 100
     networks: [internal]
     environment:
@@ -41,8 +41,8 @@ services:
   traefik:
     image: traefik:v3.0
     restart: unless-stopped
-    mem_limit: ${TRAEFIK_MEM_LIMIT}
-    cpus: ${TRAEFIK_CPUS}
+    mem_limit: ${TRAEFIK_MEM_LIMIT:-128m}
+    cpus: ${TRAEFIK_CPUS:-0.20}
     pids_limit: 200
     depends_on: [socket-proxy]
     networks: [edge, internal, observability, tenants]
@@ -59,8 +59,8 @@ services:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     profiles: ["edge"]
-    mem_limit: ${CLOUDFLARED_MEM_LIMIT}
-    cpus: ${CLOUDFLARED_CPUS}
+    mem_limit: ${CLOUDFLARED_MEM_LIMIT:-96m}
+    cpus: ${CLOUDFLARED_CPUS:-0.10}
     depends_on: [traefik]
     networks: [edge]
     command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
@@ -68,8 +68,8 @@ services:
   valkey:
     image: valkey/valkey:8-alpine
     restart: unless-stopped
-    mem_limit: ${VALKEY_MEM_LIMIT}
-    cpus: ${VALKEY_CPUS}
+    mem_limit: ${VALKEY_MEM_LIMIT:-192m}
+    cpus: ${VALKEY_CPUS:-0.20}
     pids_limit: 150
     networks: [internal]
     command:
@@ -87,7 +87,7 @@ services:
         --requirepass "$$VALKEY_PASSWORD"
     environment:
       VALKEY_PASSWORD: ${VALKEY_PASSWORD}
-      VALKEY_MAXMEMORY: ${VALKEY_MAXMEMORY}
+      VALKEY_MAXMEMORY: ${VALKEY_MAXMEMORY:-128mb}
     volumes:
       - ${AXION_ROOT}/data/valkey:/data
     healthcheck:
@@ -99,8 +99,8 @@ services:
   nats:
     image: nats:2.11-alpine
     restart: unless-stopped
-    mem_limit: ${NATS_MEM_LIMIT}
-    cpus: ${NATS_CPUS}
+    mem_limit: ${NATS_MEM_LIMIT:-192m}
+    cpus: ${NATS_CPUS:-0.20}
     pids_limit: 150
     networks: [internal]
     command:
@@ -112,31 +112,31 @@ services:
       - --store_dir
       - /data
       - --max_mem_store
-      - "${NATS_MAX_MEMORY}"
+      - "${NATS_MAX_MEMORY:-64MB}"
       - --max_file_store
-      - "${NATS_MAX_FILE}"
+      - "${NATS_MAX_FILE:-1GB}"
     volumes:
       - ${AXION_ROOT}/data/nats:/data
 
   postgres:
     image: pgvector/pgvector:pg17
     restart: unless-stopped
-    mem_limit: ${POSTGRES_MEM_LIMIT}
-    cpus: ${POSTGRES_CPUS}
+    mem_limit: ${POSTGRES_MEM_LIMIT:-768m}
+    cpus: ${POSTGRES_CPUS:-0.60}
     pids_limit: 300
     networks: [internal]
     command:
       - postgres
       - -c
-      - shared_buffers=${POSTGRES_SHARED_BUFFERS}
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-256MB}
       - -c
-      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE}
+      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-1024MB}
       - -c
-      - work_mem=${POSTGRES_WORK_MEM}
+      - work_mem=${POSTGRES_WORK_MEM:-8MB}
       - -c
-      - maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM}
+      - maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-128MB}
       - -c
-      - max_connections=${POSTGRES_MAX_CONNECTIONS}
+      - max_connections=${POSTGRES_MAX_CONNECTIONS:-40}
       - -c
       - wal_compression=on
       - -c
@@ -161,8 +161,8 @@ services:
     image: louislam/uptime-kuma:1
     restart: unless-stopped
     profiles: ["status"]
-    mem_limit: ${KUMA_MEM_LIMIT}
-    cpus: ${KUMA_CPUS}
+    mem_limit: ${KUMA_MEM_LIMIT:-256m}
+    cpus: ${KUMA_CPUS:-0.25}
     networks: [edge, internal, observability]
     ports:
       - "${KUMA_LOCAL_PORT}:3001"
@@ -180,8 +180,8 @@ services:
     image: grafana/loki:3.7.0
     restart: unless-stopped
     profiles: ["observability"]
-    mem_limit: ${LOKI_MEM_LIMIT}
-    cpus: ${LOKI_CPUS}
+    mem_limit: ${LOKI_MEM_LIMIT:-384m}
+    cpus: ${LOKI_CPUS:-0.30}
     networks: [observability, internal]
     command: -config.file=/etc/loki/loki-config.yml
     volumes:
@@ -192,8 +192,8 @@ services:
     image: grafana/alloy:latest
     restart: unless-stopped
     profiles: ["observability"]
-    mem_limit: ${ALLOY_MEM_LIMIT}
-    cpus: ${ALLOY_CPUS}
+    mem_limit: ${ALLOY_MEM_LIMIT:-192m}
+    cpus: ${ALLOY_CPUS:-0.20}
     depends_on: [loki]
     networks: [observability, internal]
     command:
@@ -210,8 +210,8 @@ services:
     image: grafana/grafana:latest
     restart: unless-stopped
     profiles: ["observability"]
-    mem_limit: ${GRAFANA_MEM_LIMIT}
-    cpus: ${GRAFANA_CPUS}
+    mem_limit: ${GRAFANA_MEM_LIMIT:-320m}
+    cpus: ${GRAFANA_CPUS:-0.35}
     depends_on: [loki]
     networks: [edge, internal, observability]
     ports:
