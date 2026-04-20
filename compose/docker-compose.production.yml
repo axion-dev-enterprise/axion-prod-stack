@@ -154,6 +154,7 @@ services:
     image: grafana/loki:3.7.0
     restart: unless-stopped
     profiles: ["observability"]
+    user: "0"
     mem_limit: ${LOKI_MEM_LIMIT:-384m}
     cpus: ${LOKI_CPUS:-0.30}
     networks: [observability, internal]
