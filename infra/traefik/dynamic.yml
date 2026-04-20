@@ -1,0 +1,17 @@
+http:
+  middlewares:
+    default-secure-headers:
+      headers:
+        frameDeny: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        referrerPolicy: no-referrer
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+    compression:
+      compress: {}
+    ratelimit-standard:
+      rateLimit:
+        average: 100
+        burst: 50

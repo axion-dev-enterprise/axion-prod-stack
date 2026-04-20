@@ -1,0 +1,4 @@
+0 2 * * * cd /opt/axion && ./scripts/backup/backup-configs.sh
+10 2 * * * cd /opt/axion && ./scripts/backup/backup-db-external.sh
+20 2 * * * cd /opt/axion && ./scripts/r2/r2-sync-push.sh
+30 2 * * * cd /opt/axion && ./scripts/backup/cleanup-old-backups.sh

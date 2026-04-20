@@ -1,0 +1,150 @@
+name: ${STACK_NAME}
+
+networks:
+  edge:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+  observability:
+    driver: bridge
+
+volumes:
+  redis_data:
+  kuma_data:
+  grafana_data:
+  loki_data:
+  alloy_data:
+  ollama_data:
+  traefik_letsencrypt:
+
+services:
+  traefik:
+    image: traefik:v3.0
+    restart: unless-stopped
+    networks: [edge, internal]
+    ports:
+      - "80:80"
+      - "443:443"
+    command:
+      - --configFile=/etc/traefik/traefik.yml
+    volumes:
+      - ../infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ../infra/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    networks: [edge]
+    command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [internal]
+    command: ["redis-server","--appendonly","yes","--requirepass","${REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    networks: [internal]
+    volumes:
+      - ollama_data:/root/.ollama
+
+  router-python:
+    build:
+      context: ../services/router-python
+    restart: unless-stopped
+    env_file:
+      - ../env/.env.example
+    networks: [internal]
+    depends_on: [redis, ollama]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.router-python.rule=Host(`router.${BASE_DOMAIN}`) && PathPrefix(`/py`)
+      - traefik.http.routers.router-python.entrypoints=websecure
+      - traefik.http.routers.router-python.tls=true
+      - traefik.http.services.router-python.loadbalancer.server.port=8081
+      - traefik.http.middlewares.router-strip-py.stripprefix.prefixes=/py
+      - traefik.http.routers.router-python.middlewares=router-strip-py
+
+  router-node:
+    build:
+      context: ../services/router-node
+    restart: unless-stopped
+    env_file:
+      - ../env/.env.example
+    networks: [internal]
+    depends_on: [redis, ollama]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.router-node.rule=Host(`router.${BASE_DOMAIN}`) && PathPrefix(`/node`)
+      - traefik.http.routers.router-node.entrypoints=websecure
+      - traefik.http.routers.router-node.tls=true
+      - traefik.http.services.router-node.loadbalancer.server.port=8082
+      - traefik.http.middlewares.router-strip-node.stripprefix.prefixes=/node
+      - traefik.http.routers.router-node.middlewares=router-strip-node
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    networks: [edge, internal]
+    volumes:
+      - kuma_data:/app/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.kuma.rule=Host(`status.${BASE_DOMAIN}`)
+      - traefik.http.routers.kuma.entrypoints=websecure
+      - traefik.http.routers.kuma.tls=true
+      - traefik.http.services.kuma.loadbalancer.server.port=3001
+
+  loki:
+    image: grafana/loki:3.7.0
+    restart: unless-stopped
+    networks: [observability, internal]
+    ports:
+      - "${LOKI_PORT}:3100"
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ../infra/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+
+  alloy:
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    networks: [observability, internal]
+    ports:
+      - "${ALLOY_PORT}:12345"
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ../infra/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+    depends_on: [loki]
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    networks: [edge, internal, observability]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SERVER_ROOT_URL: https://grafana.${BASE_DOMAIN}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on: [loki]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.grafana.rule=Host(`grafana.${BASE_DOMAIN}`)
+      - traefik.http.routers.grafana.entrypoints=websecure
+      - traefik.http.routers.grafana.tls=true
+      - traefik.http.services.grafana.loadbalancer.server.port=3000

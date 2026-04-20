@@ -1,0 +1,27 @@
+api:
+  dashboard: true
+  insecure: false
+
+log:
+  level: INFO
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: edge
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: ops@example.com
+      storage: /letsencrypt/acme.json
+      tlsChallenge: {}
