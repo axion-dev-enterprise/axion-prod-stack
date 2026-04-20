@@ -31,6 +31,7 @@ services:
     volumes:
       - ../infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ../infra/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${AXION_ROOT}/runtime/traefik:/data
 

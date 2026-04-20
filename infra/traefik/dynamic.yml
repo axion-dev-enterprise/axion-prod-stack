@@ -43,3 +43,8 @@ http:
           - security-headers
           - compression
           - ops-rate-limit
+
+tls:
+  certificates:
+    - certFile: /etc/letsencrypt/live/flow.axionenterprise.cloud/fullchain.pem
+      keyFile: /etc/letsencrypt/live/flow.axionenterprise.cloud/privkey.pem
