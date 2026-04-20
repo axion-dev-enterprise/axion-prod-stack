@@ -184,6 +184,7 @@ services:
     image: grafana/grafana:latest
     restart: unless-stopped
     profiles: ["observability"]
+    user: "0"
     mem_limit: ${GRAFANA_MEM_LIMIT:-320m}
     cpus: ${GRAFANA_CPUS:-0.35}
     depends_on: [loki]
