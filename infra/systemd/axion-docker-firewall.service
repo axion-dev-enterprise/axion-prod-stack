@@ -1,0 +1,12 @@
+[Unit]
+Description=AXION Docker Firewall Rules
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/axion/platform/scripts/security/apply-docker-firewall.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

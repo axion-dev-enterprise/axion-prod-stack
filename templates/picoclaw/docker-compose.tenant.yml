@@ -17,7 +17,8 @@ services:
       - traefik.enable=true
       - traefik.docker.network=axion_tenants
       - traefik.http.routers.picoclaw-${TENANT_SLUG}.rule=Host(`${TENANT_HOST}`)
-      - traefik.http.routers.picoclaw-${TENANT_SLUG}.entrypoints=web
+      - traefik.http.routers.picoclaw-${TENANT_SLUG}.entrypoints=websecure
+      - traefik.http.routers.picoclaw-${TENANT_SLUG}.tls=true
       - traefik.http.routers.picoclaw-${TENANT_SLUG}.middlewares=chain-public@file
       - traefik.http.services.picoclaw-${TENANT_SLUG}.loadbalancer.server.port=${PICOCLAW_GATEWAY_PORT}
 

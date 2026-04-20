@@ -24,7 +24,8 @@ services:
     pids_limit: 200
     networks: [edge, internal, observability, tenants]
     ports:
-      - "${TRAEFIK_LOCAL_PORT}:8080"
+      - "${TRAEFIK_HTTP_BIND:-127.0.0.1:8088}:8080"
+      - "${TRAEFIK_HTTPS_BIND:-127.0.0.1:8443}:8443"
     command:
       - --configFile=/etc/traefik/traefik.yml
     volumes:
@@ -144,7 +145,8 @@ services:
       - traefik.enable=true
       - traefik.docker.network=axion_edge
       - traefik.http.routers.kuma.rule=Host(`status.${BASE_DOMAIN}`)
-      - traefik.http.routers.kuma.entrypoints=web
+      - traefik.http.routers.kuma.entrypoints=websecure
+      - traefik.http.routers.kuma.tls=true
       - traefik.http.routers.kuma.middlewares=chain-ops@file
       - traefik.http.services.kuma.loadbalancer.server.port=3001
 
@@ -199,6 +201,7 @@ services:
       - traefik.enable=true
       - traefik.docker.network=axion_edge
       - traefik.http.routers.grafana.rule=Host(`grafana.${BASE_DOMAIN}`)
-      - traefik.http.routers.grafana.entrypoints=web
+      - traefik.http.routers.grafana.entrypoints=websecure
+      - traefik.http.routers.grafana.tls=true
       - traefik.http.routers.grafana.middlewares=chain-ops@file
       - traefik.http.services.grafana.loadbalancer.server.port=3000
