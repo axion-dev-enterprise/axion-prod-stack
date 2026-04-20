@@ -7,3 +7,6 @@ tmp/
 .DS_Store
 infra/systemd/*.rendered
 tenants/generated/
+
+__pycache__/
+*.pyc
