@@ -1,0 +1,14 @@
+{
+  "records": [
+    { "name": "axionenterprise.cloud", "type": "A", "proxied": true, "ttl": 1 },
+    { "name": "www.axionenterprise.cloud", "type": "A", "proxied": true, "ttl": 1 },
+    { "name": "flow.axionenterprise.cloud", "type": "A", "proxied": true, "ttl": 1 },
+    { "name": "core.flow.axionenterprise.cloud", "type": "A", "proxied": true, "ttl": 1 },
+    { "name": "sales.flow.axionenterprise.cloud", "type": "A", "proxied": true, "ttl": 1 },
+    { "name": "support.flow.axionenterprise.cloud", "type": "A", "proxied": true, "ttl": 1 },
+    { "name": "status.axionenterprise.cloud", "type": "A", "proxied": true, "ttl": 1 },
+    { "name": "grafana.axionenterprise.cloud", "type": "A", "proxied": true, "ttl": 1 },
+    { "name": "api.axionenterprise.cloud", "type": "A", "proxied": true, "ttl": 1 },
+    { "name": "admin.axionenterprise.cloud", "type": "A", "proxied": true, "ttl": 1 }
+  ]
+}

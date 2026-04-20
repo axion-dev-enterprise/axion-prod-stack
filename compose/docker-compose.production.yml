@@ -17,7 +17,7 @@ networks:
 
 services:
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3.6.13
     restart: unless-stopped
     mem_limit: ${TRAEFIK_MEM_LIMIT:-128m}
     cpus: ${TRAEFIK_CPUS:-0.20}
