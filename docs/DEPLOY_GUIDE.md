@@ -76,3 +76,23 @@ Quando o host já existe e você só quer alinhar com o GitHub:
 ```bash
 ./scripts/deploy/reprovision-fast.sh
 ```
+
+## 8. Export e replica
+
+Exportar o estado do host:
+
+```bash
+./scripts/export/export-host-config.sh
+```
+
+Preparar a replica self-host:
+
+```bash
+./scripts/deploy/bootstrap-secondary-restore.sh /opt/axion/platform /opt/axion-restore
+```
+
+Fazer cutover de DNS via Cloudflare:
+
+```bash
+./scripts/cloudflare/apply-dns-cutover.sh docs/cloudflare-dns-manifest.json <IP-DA-REPLICA>
+```
