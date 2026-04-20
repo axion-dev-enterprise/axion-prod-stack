@@ -19,6 +19,9 @@ services:
   socket-proxy:
     image: tecnativa/docker-socket-proxy:0.3.0
     restart: unless-stopped
+    mem_limit: ${SOCKET_PROXY_MEM_LIMIT}
+    cpus: ${SOCKET_PROXY_CPUS}
+    pids_limit: 100
     networks: [internal]
     environment:
       CONTAINERS: 1
@@ -38,6 +41,9 @@ services:
   traefik:
     image: traefik:v3.0
     restart: unless-stopped
+    mem_limit: ${TRAEFIK_MEM_LIMIT}
+    cpus: ${TRAEFIK_CPUS}
+    pids_limit: 200
     depends_on: [socket-proxy]
     networks: [edge, internal, observability, tenants]
     ports:
@@ -53,6 +59,8 @@ services:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     profiles: ["edge"]
+    mem_limit: ${CLOUDFLARED_MEM_LIMIT}
+    cpus: ${CLOUDFLARED_CPUS}
     depends_on: [traefik]
     networks: [edge]
     command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
@@ -60,13 +68,26 @@ services:
   valkey:
     image: valkey/valkey:8-alpine
     restart: unless-stopped
+    mem_limit: ${VALKEY_MEM_LIMIT}
+    cpus: ${VALKEY_CPUS}
+    pids_limit: 150
     networks: [internal]
     command:
       - sh
       - -lc
-      - valkey-server --appendonly yes --requirepass "$$VALKEY_PASSWORD"
+      - >-
+        valkey-server
+        --appendonly yes
+        --appendfsync everysec
+        --lazyfree-lazy-eviction yes
+        --lazyfree-lazy-expire yes
+        --maxmemory "$$VALKEY_MAXMEMORY"
+        --maxmemory-policy allkeys-lru
+        --tcp-keepalive 60
+        --requirepass "$$VALKEY_PASSWORD"
     environment:
       VALKEY_PASSWORD: ${VALKEY_PASSWORD}
+      VALKEY_MAXMEMORY: ${VALKEY_MAXMEMORY}
     volumes:
       - ${AXION_ROOT}/data/valkey:/data
     healthcheck:
@@ -78,6 +99,9 @@ services:
   nats:
     image: nats:2.11-alpine
     restart: unless-stopped
+    mem_limit: ${NATS_MEM_LIMIT}
+    cpus: ${NATS_CPUS}
+    pids_limit: 150
     networks: [internal]
     command:
       - -js
@@ -85,13 +109,40 @@ services:
       - /data
       - -m
       - "${NATS_MONITOR_PORT}"
+      - --store_dir
+      - /data
+      - --max_mem_store
+      - "${NATS_MAX_MEMORY}"
+      - --max_file_store
+      - "${NATS_MAX_FILE}"
     volumes:
       - ${AXION_ROOT}/data/nats:/data
 
   postgres:
     image: pgvector/pgvector:pg17
     restart: unless-stopped
+    mem_limit: ${POSTGRES_MEM_LIMIT}
+    cpus: ${POSTGRES_CPUS}
+    pids_limit: 300
     networks: [internal]
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS}
+      - -c
+      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE}
+      - -c
+      - work_mem=${POSTGRES_WORK_MEM}
+      - -c
+      - maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM}
+      - -c
+      - max_connections=${POSTGRES_MAX_CONNECTIONS}
+      - -c
+      - wal_compression=on
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - shared_preload_libraries=vector
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -109,6 +160,9 @@ services:
   uptime-kuma:
     image: louislam/uptime-kuma:1
     restart: unless-stopped
+    profiles: ["status"]
+    mem_limit: ${KUMA_MEM_LIMIT}
+    cpus: ${KUMA_CPUS}
     networks: [edge, internal, observability]
     ports:
       - "${KUMA_LOCAL_PORT}:3001"
@@ -125,6 +179,9 @@ services:
   loki:
     image: grafana/loki:3.7.0
     restart: unless-stopped
+    profiles: ["observability"]
+    mem_limit: ${LOKI_MEM_LIMIT}
+    cpus: ${LOKI_CPUS}
     networks: [observability, internal]
     command: -config.file=/etc/loki/loki-config.yml
     volumes:
@@ -134,6 +191,9 @@ services:
   alloy:
     image: grafana/alloy:latest
     restart: unless-stopped
+    profiles: ["observability"]
+    mem_limit: ${ALLOY_MEM_LIMIT}
+    cpus: ${ALLOY_CPUS}
     depends_on: [loki]
     networks: [observability, internal]
     command:
@@ -149,6 +209,9 @@ services:
   grafana:
     image: grafana/grafana:latest
     restart: unless-stopped
+    profiles: ["observability"]
+    mem_limit: ${GRAFANA_MEM_LIMIT}
+    cpus: ${GRAFANA_CPUS}
     depends_on: [loki]
     networks: [edge, internal, observability]
     ports:

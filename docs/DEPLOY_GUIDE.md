@@ -30,19 +30,34 @@ Preencha pelo menos:
 - `CF_R2_*`
 - `BACKUP_GITHUB_TOKEN`
 
-## 3. Subir a plataforma
+## 3. Tunar o host para 1 vCPU / 4 GB
+
+```bash
+sudo ./scripts/security/tune-host-resources.sh 4
+```
+
+Isso cria swap e aplica tuning conservador de memória/cache para reduzir picos de busy e OOM.
+
+## 4. Subir a plataforma
 
 ```bash
 ./scripts/deploy/compose-up.sh
 ```
 
-## 4. Instalar timers de backup
+Por padrão, em servidor pequeno, a stack sobe sem observabilidade pesada.
+
+- `ENABLE_OBSERVABILITY=false`
+- `ENABLE_STATUS=false`
+
+Ative depois se o host estiver estável.
+
+## 5. Instalar timers de backup
 
 ```bash
 sudo ./scripts/deploy/install-systemd-units.sh
 ```
 
-## 5. Provisionar um tenant PicoClaw
+## 6. Provisionar um tenant PicoClaw
 
 ```bash
 ./scripts/tenants/provision-picoclaw-tenant.sh cliente-a
@@ -54,7 +69,7 @@ Ou com hostname explícito:
 ./scripts/tenants/provision-picoclaw-tenant.sh cliente-a bot.cliente-a.axionenterprise.cloud
 ```
 
-## 6. Reprovisionamento rápido
+## 7. Reprovisionamento rápido
 
 Quando o host já existe e você só quer alinhar com o GitHub:
 

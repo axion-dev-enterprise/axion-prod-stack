@@ -3,6 +3,9 @@ services:
     image: ${PICOCLAW_IMAGE}
     container_name: picoclaw-${TENANT_SLUG}
     restart: unless-stopped
+    mem_limit: ${PICOCLAW_TENANT_MEM_LIMIT}
+    cpus: ${PICOCLAW_TENANT_CPUS}
+    pids_limit: 200
     environment:
       PICOCLAW_GATEWAY_HOST: 0.0.0.0
     volumes:

@@ -19,6 +19,12 @@ EXTRA_ARGS=()
 if [[ "${CF_ENABLE:-false}" == "true" ]]; then
   EXTRA_ARGS+=(--profile edge)
 fi
+if [[ "${ENABLE_OBSERVABILITY:-false}" == "true" ]]; then
+  EXTRA_ARGS+=(--profile observability)
+fi
+if [[ "${ENABLE_STATUS:-false}" == "true" ]]; then
+  EXTRA_ARGS+=(--profile status)
+fi
 
 docker compose --env-file "$ENV_FILE" -f docker-compose.production.yml "${EXTRA_ARGS[@]}" up -d
 docker compose --env-file "$ENV_FILE" -f docker-compose.production.yml "${EXTRA_ARGS[@]}" ps
