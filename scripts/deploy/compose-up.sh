@@ -9,20 +9,25 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-set -a
-source "$ENV_FILE"
-set +a
+read_env_value() {
+  local key="$1"
+  local value
+  value="$(grep -E "^${key}=" "$ENV_FILE" | tail -n1 | cut -d= -f2- || true)"
+  value="${value%\"}"
+  value="${value#\"}"
+  printf '%s' "${value:-}"
+}
 
 cd "$ROOT_DIR/compose"
 
 EXTRA_ARGS=()
-if [[ "${CF_ENABLE:-false}" == "true" ]]; then
+if [[ "$(read_env_value CF_ENABLE)" == "true" ]]; then
   EXTRA_ARGS+=(--profile edge)
 fi
-if [[ "${ENABLE_OBSERVABILITY:-false}" == "true" ]]; then
+if [[ "$(read_env_value ENABLE_OBSERVABILITY)" == "true" ]]; then
   EXTRA_ARGS+=(--profile observability)
 fi
-if [[ "${ENABLE_STATUS:-false}" == "true" ]]; then
+if [[ "$(read_env_value ENABLE_STATUS)" == "true" ]]; then
   EXTRA_ARGS+=(--profile status)
 fi
 
