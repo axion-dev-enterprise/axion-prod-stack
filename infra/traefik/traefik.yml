@@ -11,7 +11,7 @@ entryPoints:
           to: websecure
           scheme: https
   websecure:
-    address: ":8443"
+    address: ":443"
 
 api:
   dashboard: false
