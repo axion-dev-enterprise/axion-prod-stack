@@ -34,7 +34,6 @@ services:
       VERSION: 1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    read_only: true
     tmpfs:
       - /run
 
@@ -109,12 +108,6 @@ services:
       - /data
       - -m
       - "${NATS_MONITOR_PORT}"
-      - --store_dir
-      - /data
-      - --max_mem_store
-      - "${NATS_MAX_MEMORY:-64MB}"
-      - --max_file_store
-      - "${NATS_MAX_FILE:-1GB}"
     volumes:
       - ${AXION_ROOT}/data/nats:/data
 
