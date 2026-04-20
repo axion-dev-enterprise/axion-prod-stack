@@ -16,6 +16,11 @@ RESTIC_RETENTION_DAILY_VALUE="$(read_env_value "$ENV_FILE" RESTIC_RETENTION_DAIL
 RESTIC_RETENTION_WEEKLY_VALUE="$(read_env_value "$ENV_FILE" RESTIC_RETENTION_WEEKLY)"
 RESTIC_RETENTION_MONTHLY_VALUE="$(read_env_value "$ENV_FILE" RESTIC_RETENTION_MONTHLY)"
 
+if [[ -z "$AWS_ACCESS_KEY_ID" || -z "$AWS_SECRET_ACCESS_KEY" || -z "$RESTIC_PASSWORD" || "$RESTIC_REPOSITORY" == "s3:/$(read_env_value "$ENV_FILE" CF_R2_BUCKET)" ]]; then
+  echo "restic backup skipped: env incomplete"
+  exit 0
+fi
+
 restic snapshots >/dev/null 2>&1 || restic init
 
 "$ROOT_DIR/scripts/backup/backup-db-external.sh" >/dev/null

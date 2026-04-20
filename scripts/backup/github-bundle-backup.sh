@@ -37,6 +37,6 @@ git clone "https://x-access-token:${BACKUP_GITHUB_TOKEN_VALUE}@github.com/${BACK
 git -C "$TMP_DIR/repo" checkout -B "$BACKUP_GITHUB_BRANCH_VALUE"
 mkdir -p "$TMP_DIR/repo/backups"
 cp "$BUNDLE" "$TMP_DIR/repo/backups/"
-git -C "$TMP_DIR/repo" add backups
+git -C "$TMP_DIR/repo" add -f backups
 git -C "$TMP_DIR/repo" commit -m "backup: ${STAMP}" >/dev/null 2>&1 || true
 git -C "$TMP_DIR/repo" push origin "$BACKUP_GITHUB_BRANCH_VALUE" >/dev/null 2>&1
