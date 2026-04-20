@@ -1,18 +1,63 @@
 # Deploy Guide
 
-1. Copie `env/.env.example` para `.env` e preencha as variáveis.
-2. Ajuste `BASE_DOMAIN`, `CF_TUNNEL_TOKEN`, chaves OpenRouter e R2.
-3. Suba com:
+## 1. Preparar o host
+
+No servidor:
+
+```bash
+git clone https://github.com/axion-dev-enterprise/axion-prod-stack.git /opt/axion/platform
+cd /opt/axion/platform
+sudo ./scripts/deploy/bootstrap-server.sh /opt/axion/platform
+```
+
+## 2. Criar o arquivo de ambiente
+
+```bash
+cp env/.env.example env/.env
+vim env/.env
+```
+
+Preencha pelo menos:
+
+- `AXION_ROOT`
+- `BASE_DOMAIN`
+- `TENANT_BASE_DOMAIN`
+- `OPENROUTER_API_KEY`
+- `VALKEY_PASSWORD`
+- `POSTGRES_PASSWORD`
+- `GRAFANA_ADMIN_PASSWORD`
+- `RESTIC_PASSWORD`
+- `CF_R2_*`
+- `BACKUP_GITHUB_TOKEN`
+
+## 3. Subir a plataforma
+
 ```bash
 ./scripts/deploy/compose-up.sh
 ```
-4. Teste:
+
+## 4. Instalar timers de backup
+
 ```bash
-./scripts/smoke/smoke-http.sh https://router.seudominio.com
+sudo ./scripts/deploy/install-systemd-units.sh
 ```
-5. Configure backup:
+
+## 5. Provisionar um tenant PicoClaw
+
 ```bash
-./scripts/r2/rclone-config-r2.sh
-./scripts/backup/backup-configs.sh
-./scripts/r2/r2-sync-push.sh
+./scripts/tenants/provision-picoclaw-tenant.sh cliente-a
+```
+
+Ou com hostname explícito:
+
+```bash
+./scripts/tenants/provision-picoclaw-tenant.sh cliente-a bot.cliente-a.axionenterprise.cloud
+```
+
+## 6. Reprovisionamento rápido
+
+Quando o host já existe e você só quer alinhar com o GitHub:
+
+```bash
+./scripts/deploy/reprovision-fast.sh
 ```

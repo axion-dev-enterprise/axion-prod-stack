@@ -1,0 +1,25 @@
+services:
+  picoclaw:
+    image: ${PICOCLAW_IMAGE}
+    container_name: picoclaw-${TENANT_SLUG}
+    restart: unless-stopped
+    environment:
+      PICOCLAW_GATEWAY_HOST: 0.0.0.0
+    volumes:
+      - ./data:/root/.picoclaw
+    networks:
+      - axion_tenants
+      - axion_internal
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=axion_tenants
+      - traefik.http.routers.picoclaw-${TENANT_SLUG}.rule=Host(`${TENANT_HOST}`)
+      - traefik.http.routers.picoclaw-${TENANT_SLUG}.entrypoints=web
+      - traefik.http.routers.picoclaw-${TENANT_SLUG}.middlewares=chain-public@file
+      - traefik.http.services.picoclaw-${TENANT_SLUG}.loadbalancer.server.port=${PICOCLAW_GATEWAY_PORT}
+
+networks:
+  axion_tenants:
+    external: true
+  axion_internal:
+    external: true

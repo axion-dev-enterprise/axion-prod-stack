@@ -1,0 +1,9 @@
+[Unit]
+Description=AXION GitHub Bundle Backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/axion/platform
+ExecStart=/opt/axion/platform/scripts/backup/github-bundle-backup.sh

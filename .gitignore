@@ -1,0 +1,9 @@
+.env
+.env.local
+.env.production
+*.local
+backups/
+tmp/
+.DS_Store
+infra/systemd/*.rendered
+tenants/generated/

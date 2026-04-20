@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
-WORKDIR="${BACKUP_WORKDIR:-./backups}"
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ENV_FILE="${ENV_FILE:-$ROOT_DIR/env/.env}"
+
+set -a
+source "$ENV_FILE"
+set +a
+
 STAMP="$(date +%F_%H%M%S)"
-OUT="$WORKDIR/db_$STAMP.sql.gz"
-mkdir -p "$WORKDIR"
-if [[ -z "${DB_DUMP_CMD:-}" ]]; then
-  echo "DB_DUMP_CMD não definido."
-  exit 1
-fi
-bash -lc "$DB_DUMP_CMD" > "$OUT"
-echo "$OUT"
+DUMP_DIR="${AXION_ROOT}/data/postgres-dumps"
+mkdir -p "$DUMP_DIR"
+
+docker exec "$(docker ps --filter name=postgres --format '{{.Names}}' | head -n1)" \
+  pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc \
+  > "${DUMP_DIR}/postgres_${STAMP}.dump"
+
+echo "${DUMP_DIR}/postgres_${STAMP}.dump"

@@ -1,17 +1,45 @@
 http:
   middlewares:
-    default-secure-headers:
+    redirect-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+    security-headers:
       headers:
         frameDeny: true
         browserXssFilter: true
         contentTypeNosniff: true
-        referrerPolicy: no-referrer
         stsSeconds: 31536000
         stsIncludeSubdomains: true
         stsPreload: true
+        referrerPolicy: strict-origin-when-cross-origin
+        customResponseHeaders:
+          X-Robots-Tag: noindex,nofollow
+
     compression:
       compress: {}
-    ratelimit-standard:
+
+    public-rate-limit:
       rateLimit:
         average: 100
         burst: 50
+
+    ops-rate-limit:
+      rateLimit:
+        average: 30
+        burst: 20
+
+    chain-public:
+      chain:
+        middlewares:
+          - security-headers
+          - compression
+          - public-rate-limit
+
+    chain-ops:
+      chain:
+        middlewares:
+          - security-headers
+          - compression
+          - ops-rate-limit

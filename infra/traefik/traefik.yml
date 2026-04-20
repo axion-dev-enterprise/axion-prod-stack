@@ -1,27 +1,25 @@
-api:
-  dashboard: true
-  insecure: false
-
-log:
-  level: INFO
+global:
+  sendAnonymousUsage: false
+  checkNewVersion: false
 
 entryPoints:
   web:
-    address: ":80"
-  websecure:
-    address: ":443"
+    address: ":8080"
+
+api:
+  dashboard: false
+  insecure: false
 
 providers:
   docker:
+    endpoint: "tcp://socket-proxy:2375"
     exposedByDefault: false
-    network: edge
+    network: axion_edge
   file:
     filename: /etc/traefik/dynamic.yml
     watch: true
 
-certificatesResolvers:
-  letsencrypt:
-    acme:
-      email: ops@example.com
-      storage: /letsencrypt/acme.json
-      tlsChallenge: {}
+accessLog: {}
+
+log:
+  level: INFO

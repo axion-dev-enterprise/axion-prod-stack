@@ -1,0 +1,9 @@
+[Unit]
+Description=AXION Restic Backup
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/axion/platform
+ExecStart=/opt/axion/platform/scripts/backup/restic-backup.sh

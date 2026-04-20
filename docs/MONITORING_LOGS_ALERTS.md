@@ -1,17 +1,27 @@
-# Monitoramento, logs e alertas
+# Monitoring, Logs And Alerts
 
-Stack:
-- Uptime Kuma
-- Grafana
-- Loki
-- Alloy
-- Telegram/Slack
-- Healthchecks.io
+## Observabilidade padrão
 
-Monitores recomendados:
-- /py/health
-- /node/health
-- status.example.com
-- grafana.example.com
-- backup diário
-- sync R2 diário
+- `Alloy` coleta logs dos containers
+- `Loki` armazena logs
+- `Grafana` visualiza logs e métricas
+- `Uptime Kuma` faz smoke checks e health checks externos
+
+## Alertas
+
+Os scripts já preveem:
+
+- `HEALTHCHECKS_PING_URL`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `SLACK_WEBHOOK_URL`
+
+## Checks sugeridos
+
+- plataforma base
+- `grafana`
+- `status`
+- cada hostname de tenant provisionado
+- health do Postgres
+- health do Valkey
+- health do NATS
