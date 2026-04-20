@@ -16,34 +16,12 @@ networks:
     driver: bridge
 
 services:
-  socket-proxy:
-    image: tecnativa/docker-socket-proxy:0.3.0
-    restart: unless-stopped
-    mem_limit: ${SOCKET_PROXY_MEM_LIMIT:-64m}
-    cpus: ${SOCKET_PROXY_CPUS:-0.10}
-    pids_limit: 100
-    networks: [internal]
-    environment:
-      CONTAINERS: 1
-      EVENTS: 1
-      INFO: 1
-      NETWORKS: 1
-      PING: 1
-      SERVICES: 1
-      TASKS: 1
-      VERSION: 1
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    tmpfs:
-      - /run
-
   traefik:
     image: traefik:v3.0
     restart: unless-stopped
     mem_limit: ${TRAEFIK_MEM_LIMIT:-128m}
     cpus: ${TRAEFIK_CPUS:-0.20}
     pids_limit: 200
-    depends_on: [socket-proxy]
     networks: [edge, internal, observability, tenants]
     ports:
       - "${TRAEFIK_LOCAL_PORT}:8080"
@@ -52,6 +30,7 @@ services:
     volumes:
       - ../infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ../infra/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${AXION_ROOT}/runtime/traefik:/data
 
   cloudflared:
