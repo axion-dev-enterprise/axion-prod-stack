@@ -1,0 +1,96 @@
+{
+  "updated_at": "2026-04-21",
+  "services": [
+    {
+      "name": "axionenterprise.cloud",
+      "current": "VPS behind Cloudflare",
+      "target": "Cloudflare Pages",
+      "category": "direct_migration",
+      "notes": "Static institutional landing and WWW alias."
+    },
+    {
+      "name": "flow.axionenterprise.cloud",
+      "current": "VPS app + internal services",
+      "target": "Cloudflare Pages + Workers + Hyperdrive/Supabase",
+      "category": "split_migration",
+      "notes": "Frontend can move first. Data/API layer should be split from current origin."
+    },
+    {
+      "name": "api.axionenterprise.cloud",
+      "current": "VPS API/webhooks",
+      "target": "Cloudflare Workers",
+      "category": "direct_migration",
+      "notes": "Good candidate for edge API gateway, webhook ingress, and lightweight handlers."
+    },
+    {
+      "name": "admin.axionenterprise.cloud",
+      "current": "VPS admin panel",
+      "target": "Cloudflare Pages + Workers",
+      "category": "direct_migration",
+      "notes": "Panel frontend and BFF pattern fit serverless well."
+    },
+    {
+      "name": "scan.axionenterprise.cloud",
+      "current": "Python scanner coupled to Docker runtime",
+      "target": "Workers/Pages control plane plus redesigned runtime",
+      "category": "redesign_required",
+      "notes": "Current implementation depends on Docker socket and container introspection."
+    },
+    {
+      "name": "postgres",
+      "current": "Self-hosted Postgres + pgvector",
+      "target": "Supabase Postgres",
+      "category": "managed_replacement",
+      "notes": "Primary relational state should move here unless specific vector scale dictates otherwise."
+    },
+    {
+      "name": "valkey",
+      "current": "Self-hosted Valkey",
+      "target": "Upstash Redis or Cloudflare KV/Durable Objects",
+      "category": "managed_replacement",
+      "notes": "Choose target per usage pattern: cache, locks, ephemeral state, or config."
+    },
+    {
+      "name": "nats",
+      "current": "Self-hosted NATS JetStream",
+      "target": "Cloudflare Queues or Supabase Queues",
+      "category": "managed_replacement",
+      "notes": "Async processing should leave the VPS early."
+    },
+    {
+      "name": "grafana/loki/alloy",
+      "current": "Self-hosted observability stack",
+      "target": "Grafana Cloud or Better Stack",
+      "category": "managed_replacement",
+      "notes": "Low strategic value to self-host during migration."
+    },
+    {
+      "name": "uptime-kuma",
+      "current": "Self-hosted status/ops monitoring",
+      "target": "Better Stack or UptimeRobot",
+      "category": "managed_replacement",
+      "notes": "External monitoring is more useful during disaster recovery."
+    },
+    {
+      "name": "picoclaw-official",
+      "current": "Long-running custom container with persistent workspace",
+      "target": "Managed containers or future redesign",
+      "category": "redesign_required",
+      "notes": "Not a clean fit for edge/serverless today."
+    },
+    {
+      "name": "tenant-picoclaw-*",
+      "current": "Per-tenant long-running containers with local data",
+      "target": "Managed containers or major redesign",
+      "category": "redesign_required",
+      "notes": "Control plane can move serverless before tenant runtime does."
+    },
+    {
+      "name": "openclaw-gateway",
+      "current": "Long-running gateway with workspace directories",
+      "target": "Managed containers first",
+      "category": "redesign_required",
+      "notes": "Persistent workspace and process lifecycle make pure serverless unsuitable."
+    }
+  ]
+}

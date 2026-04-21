@@ -2,6 +2,7 @@ services:
   picoclaw:
     image: ${PICOCLAW_IMAGE}
     container_name: picoclaw-${TENANT_SLUG}
+    command: ["gateway"]
     restart: unless-stopped
     mem_limit: ${PICOCLAW_TENANT_MEM_LIMIT:-768m}
     cpus: ${PICOCLAW_TENANT_CPUS:-0.70}

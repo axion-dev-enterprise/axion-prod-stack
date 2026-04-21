@@ -149,6 +149,15 @@ services:
       - traefik.http.routers.kuma.entrypoints=websecure
       - traefik.http.routers.kuma.tls=true
       - traefik.http.routers.kuma.middlewares=chain-ops@file
+      - traefik.http.routers.kuma-public-root.rule=Host(`status.${BASE_DOMAIN}`) && Path(`/`)
+      - traefik.http.routers.kuma-public-root.entrypoints=websecure
+      - traefik.http.routers.kuma-public-root.tls=true
+      - traefik.http.routers.kuma-public-root.priority=100
+      - traefik.http.routers.kuma-public-root.middlewares=kuma-status-root-redirect@docker
+      - traefik.http.routers.kuma-public-root.service=kuma
+      - traefik.http.middlewares.kuma-status-root-redirect.redirectregex.regex=^https://status\\.${BASE_DOMAIN}/$$
+      - traefik.http.middlewares.kuma-status-root-redirect.redirectregex.replacement=https://status.${BASE_DOMAIN}/status/public
+      - traefik.http.middlewares.kuma-status-root-redirect.redirectregex.permanent=true
       - traefik.http.services.kuma.loadbalancer.server.port=3001
 
   loki:
@@ -208,3 +217,82 @@ services:
       - traefik.http.routers.grafana.tls=true
       - traefik.http.routers.grafana.middlewares=chain-ops@file
       - traefik.http.services.grafana.loadbalancer.server.port=3000
+
+  qr-scanner:
+    build:
+      context: ../infra/scanner
+    restart: unless-stopped
+    mem_limit: ${QR_SCANNER_MEM_LIMIT:-128m}
+    cpus: ${QR_SCANNER_CPUS:-0.15}
+    networks: [edge, internal, observability]
+    environment:
+      QR_SCANNER_CONTAINER_PREFIX: ${QR_SCANNER_CONTAINER_PREFIX:-picoclaw-}
+      QR_SCANNER_SITE_TITLE: ${QR_SCANNER_SITE_TITLE:-AXION QR Dashboard}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8000/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=axion_edge
+      - traefik.http.routers.qr-scanner.rule=Host(`scan.${BASE_DOMAIN}`)
+      - traefik.http.routers.qr-scanner.entrypoints=websecure
+      - traefik.http.routers.qr-scanner.tls=true
+      - traefik.http.routers.qr-scanner.middlewares=chain-ops@file
+      - traefik.http.services.qr-scanner.loadbalancer.server.port=8000
+
+  tenant-chat:
+    build:
+      context: ../infra/tenant-chat
+    restart: unless-stopped
+    mem_limit: ${TENANT_CHAT_MEM_LIMIT:-160m}
+    cpus: ${TENANT_CHAT_CPUS:-0.20}
+    networks: [edge, tenants]
+    environment:
+      TENANT_CHAT_SITE_TITLE: ${TENANT_CHAT_SITE_TITLE:-AXION Tenant Chat}
+      TENANT_CHAT_PICO_TOKEN: ${TENANT_CHAT_PICO_TOKEN:-${TENANT_ADMIN_TOKEN}}
+      TENANT_CHAT_PICO_PORT: ${PICOCLAW_GATEWAY_PORT:-18790}
+      TENANT_CHAT_TENANT_SUFFIX: .flow.${BASE_DOMAIN}
+      TENANT_CHAT_CONTAINER_PREFIX: ${QR_SCANNER_CONTAINER_PREFIX:-picoclaw-}
+      TENANT_CHAT_SCAN_HOST: https://scan.${BASE_DOMAIN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8010/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=axion_edge
+      - traefik.http.routers.tenant-chat.rule=Host(`scan.${BASE_DOMAIN}`) && PathPrefix(`/chat`)
+      - traefik.http.routers.tenant-chat.entrypoints=websecure
+      - traefik.http.routers.tenant-chat.tls=true
+      - traefik.http.routers.tenant-chat.priority=110
+      - traefik.http.routers.tenant-chat.middlewares=chain-ops@file
+      - traefik.http.services.tenant-chat.loadbalancer.server.port=8010
+
+  picoclaw-official:
+    build:
+      context: ../infra/picoclaw-custom
+      args:
+        PICOCLAW_GIT_REF: ${PICOCLAW_GIT_REF:-e556a816e4db4c158ab3a455693018f452f63eba}
+    container_name: picoclaw-axion-official
+    restart: unless-stopped
+    mem_limit: ${PICOCLAW_OFFICIAL_MEM_LIMIT:-768m}
+    cpus: ${PICOCLAW_OFFICIAL_CPUS:-0.70}
+    pids_limit: 200
+    networks: [tenants, internal]
+    environment:
+      PICOCLAW_GATEWAY_HOST: 0.0.0.0
+    command: ["gateway"]
+    volumes:
+      - ${AXION_ROOT}/tenants/axion-official/data:/root/.picoclaw
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:18790/health | grep -q '\"status\":\"ok\"'"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
