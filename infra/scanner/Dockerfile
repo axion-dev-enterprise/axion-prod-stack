@@ -9,6 +9,7 @@ RUN apt-get update \
 RUN pip install --no-cache-dir \
     docker==7.1.0 \
     fastapi==0.116.1 \
+    python-multipart==0.0.20 \
     requests==2.32.5 \
     uvicorn==0.35.0
 

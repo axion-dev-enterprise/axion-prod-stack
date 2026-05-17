@@ -1,20 +1,32 @@
+import hmac
 import html
 import os
 import re
-from datetime import datetime
+import secrets
 import time
+from datetime import datetime
+from hashlib import sha256
 from typing import List, Optional, Tuple
 
 import docker
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 app = FastAPI()
 
 CONTAINER_PREFIX = os.getenv("QR_SCANNER_CONTAINER_PREFIX", "picoclaw-")
 SITE_TITLE = os.getenv("QR_SCANNER_SITE_TITLE", "AXION QR Dashboard")
+OPS_PASSWORD = os.getenv("AXION_OPS_PASSWORD", os.getenv("TENANT_ADMIN_TOKEN", ""))
+SESSION_SECRET = os.getenv("AXION_OPS_SESSION_SECRET", OPS_PASSWORD or "axion-ops")
+COOKIE_NAME = os.getenv("AXION_OPS_COOKIE_NAME", "axion_ops")
+SESSION_TTL_SECONDS = int(os.getenv("AXION_OPS_SESSION_TTL_SECONDS", "43200"))
 ANSI_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
-QR_CHARS = set("█▀▄ ")
+QR_CHARS = {"\u2588", "\u2580", "\u2584", " "}
+MOJIBAKE_REPLACEMENTS = {
+    "â–ˆ": "\u2588",
+    "â–€": "\u2580",
+    "â–„": "\u2584",
+}
 
 try:
     client = docker.from_env()
@@ -26,6 +38,136 @@ def strip_ansi(text: str) -> str:
     return ANSI_RE.sub("", text)
 
 
+def normalize_qr_chars(text: str) -> str:
+    clean = strip_ansi(text)
+    for bad, good in MOJIBAKE_REPLACEMENTS.items():
+        clean = clean.replace(bad, good)
+    return clean
+
+
+def sign_value(value: str) -> str:
+    return hmac.new(SESSION_SECRET.encode("utf-8"), value.encode("utf-8"), sha256).hexdigest()
+
+
+def build_session_cookie() -> str:
+    issued = str(int(time.time()))
+    nonce = secrets.token_hex(8)
+    payload = f"{issued}:{nonce}"
+    return f"{payload}:{sign_value(payload)}"
+
+
+def is_authenticated(request: Request) -> bool:
+    if not OPS_PASSWORD:
+        return True
+    token = request.cookies.get(COOKIE_NAME, "")
+    parts = token.split(":")
+    if len(parts) != 3:
+        return False
+    issued, nonce, signature = parts
+    payload = f"{issued}:{nonce}"
+    if not hmac.compare_digest(sign_value(payload), signature):
+        return False
+    try:
+        issued_at = int(issued)
+    except ValueError:
+        return False
+    return (issued_at + SESSION_TTL_SECONDS) >= int(time.time())
+
+
+def require_auth(request: Request) -> None:
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+
+def login_html(next_path: str, error: str = "") -> str:
+    error_block = ""
+    if error:
+        error_block = f'<div class="login-error">{html.escape(error)}</div>'
+    return f"""
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>{html.escape(SITE_TITLE)} · Login</title>
+      <style>
+        :root {{
+          color-scheme: dark;
+          --bg: #03060a;
+          --panel: rgba(10, 18, 29, 0.88);
+          --border: rgba(255,255,255,0.08);
+          --text: #ecf4ff;
+          --muted: #91a5bb;
+          --danger: #ff8b8b;
+        }}
+        * {{ box-sizing: border-box; }}
+        body {{
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          background: radial-gradient(circle at top, #11233d 0%, #050810 58%, #020407 100%);
+          color: var(--text);
+          font-family: "Segoe UI", system-ui, sans-serif;
+          padding: 24px;
+        }}
+        .card {{
+          width: min(100%, 420px);
+          border: 1px solid var(--border);
+          border-radius: 28px;
+          background: var(--panel);
+          padding: 28px;
+          box-shadow: 0 22px 64px rgba(0,0,0,.32);
+        }}
+        h1 {{ margin: 0 0 10px; font-size: 30px; }}
+        p {{ margin: 0 0 18px; color: var(--muted); line-height: 1.6; }}
+        .login-error {{
+          margin-bottom: 14px;
+          padding: 12px 14px;
+          border-radius: 16px;
+          background: rgba(255,107,107,.12);
+          border: 1px solid rgba(255,107,107,.28);
+          color: var(--danger);
+        }}
+        label {{ display: block; margin-bottom: 8px; font-size: 14px; color: var(--muted); }}
+        input {{
+          width: 100%;
+          border-radius: 16px;
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,0.04);
+          color: var(--text);
+          padding: 14px 16px;
+          font: inherit;
+          margin-bottom: 14px;
+        }}
+        button {{
+          width: 100%;
+          border: none;
+          border-radius: 16px;
+          padding: 14px 16px;
+          font: inherit;
+          font-weight: 700;
+          background: linear-gradient(180deg, #6ae6ff 0%, #2cbbe8 100%);
+          color: #04111a;
+          cursor: pointer;
+        }}
+      </style>
+    </head>
+    <body>
+      <form class="card" method="post" action="/auth/login">
+        <h1>Acesso operacional</h1>
+        <p>Entre para visualizar QR codes, eventos recentes e controlar os tenants sem expor o console publicamente.</p>
+        {error_block}
+        <input type="hidden" name="next" value="{html.escape(next_path)}" />
+        <label for="password">Senha de acesso</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+        <button type="submit">Entrar</button>
+      </form>
+    </body>
+    </html>
+    """
+
+
 def list_picoclaw_containers():
     containers = client.containers.list()
     return sorted(
@@ -35,12 +177,12 @@ def list_picoclaw_containers():
 
 
 def is_qr_line(line: str) -> bool:
-    normalized = line.strip()
-    return bool(normalized) and set(normalized) <= QR_CHARS and "█" in normalized
+    normalized = normalize_qr_chars(line).strip()
+    return bool(normalized) and set(normalized) <= QR_CHARS and "\u2588" in normalized
 
 
 def extract_qr(logs: str) -> str:
-    lines = [strip_ansi(line) for line in logs.splitlines()]
+    lines = [normalize_qr_chars(line) for line in logs.splitlines()]
     markers = [i for i, line in enumerate(lines) if "Scan this QR code" in line]
     if not markers:
         return ""
@@ -50,28 +192,24 @@ def extract_qr(logs: str) -> str:
     if any("event=timeout" in line.lower() for line in trailing_lines):
         return ""
 
-    lines = trailing_lines
     blocks: List[List[str]] = []
     current: List[str] = []
-
-    for line in lines:
+    for line in trailing_lines:
         candidate = line.rstrip()
         if is_qr_line(candidate):
             current.append(candidate)
         elif current:
             blocks.append(current)
             current = []
-
     if current:
         blocks.append(current)
-
     if not blocks:
         return ""
     return "\n".join(blocks[-1])
 
 
 def extract_last_qr_timestamp(logs: str) -> Optional[str]:
-    lines = [strip_ansi(line) for line in logs.splitlines()]
+    lines = [normalize_qr_chars(line) for line in logs.splitlines()]
     markers = [line for line in lines if "Scan this QR code" in line]
     if not markers:
         return None
@@ -103,12 +241,12 @@ def derive_status(logs: str, qr: str) -> Tuple[str, str]:
 def clean_recent_logs(logs: str) -> List[str]:
     recent: List[str] = []
     for raw in logs.splitlines():
-        clean = strip_ansi(raw).strip()
+        clean = normalize_qr_chars(raw).strip()
         if not clean:
             continue
         if is_qr_line(clean):
             continue
-        if clean.startswith("██████") or "PicoClaw is a lightweight personal AI assistant" in clean:
+        if clean.startswith("\u2588\u2588\u2588\u2588\u2588\u2588") or "PicoClaw is a lightweight personal AI assistant" in clean:
             continue
         recent.append(clean)
     return recent[-8:]
@@ -117,19 +255,18 @@ def clean_recent_logs(logs: str) -> List[str]:
 def qr_to_matrix(qr: str) -> List[List[int]]:
     if not qr:
         return []
-
     rows: List[List[int]] = []
     for line in qr.splitlines():
         upper: List[int] = []
         lower: List[int] = []
         for char in line:
-            if char == "█":
+            if char == "\u2588":
                 upper.append(1)
                 lower.append(1)
-            elif char == "▀":
+            elif char == "\u2580":
                 upper.append(1)
                 lower.append(0)
-            elif char == "▄":
+            elif char == "\u2584":
                 upper.append(0)
                 lower.append(1)
             else:
@@ -145,17 +282,22 @@ def qr_matrix_to_html(qr: str) -> str:
     if not matrix:
         return '<div class="qr-empty">Aguardando um QR limpo do WhatsApp...</div>'
 
-    modules: List[str] = []
     size = len(matrix[0])
-    for row in matrix:
-        for value in row:
-            cls = "qr-on" if value else "qr-off"
-            modules.append(f'<span class="qr-cell {cls}"></span>')
-
+    quiet_zone = 4
+    total = size + quiet_zone * 2
+    rects: List[str] = []
+    for row_index, row in enumerate(matrix):
+        for col_index, value in enumerate(row):
+            if value:
+                rects.append(
+                    f'<rect x="{col_index + quiet_zone}" y="{row_index + quiet_zone}" width="1" height="1" fill="#05070b" />'
+                )
     return (
-        f'<div class="qr-grid" style="grid-template-columns: repeat({size}, 1fr)">'
-        + "".join(modules)
-        + "</div>"
+        f'<svg class="qr-svg" viewBox="0 0 {total} {total}" role="img" aria-label="QR code do WhatsApp" '
+        'xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">'
+        f'<rect width="{total}" height="{total}" fill="#ffffff" />'
+        + "".join(rects)
+        + "</svg>"
     )
 
 
@@ -213,10 +355,7 @@ def page_shell(title: str, body_html: str, subtitle: str) -> str:
         body {{ font-family: 'Plus Jakarta Sans', sans-serif; background: radial-gradient(circle at top, #13213b 0%, #06070b 52%, #030406 100%); color: #f8fafc; }}
         .glass {{ background: rgba(15, 23, 42, 0.68); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); }}
         .qr-shell {{ background: linear-gradient(180deg, #f8fbff 0%, #dde7f1 100%); box-shadow: inset 0 0 0 1px rgba(15,23,42,0.06); display: flex; justify-content: center; }}
-        .qr-grid {{ display: grid; width: min(100%, 520px); aspect-ratio: 1 / 1; background: #ffffff; padding: 16px; border-radius: 18px; }}
-        .qr-cell {{ width: 100%; aspect-ratio: 1 / 1; }}
-        .qr-on {{ background: #05070b; }}
-        .qr-off {{ background: #ffffff; }}
+        .qr-svg {{ display: block; width: min(100%, 520px); aspect-ratio: 1 / 1; background: #ffffff; border-radius: 18px; padding: 16px; }}
         .qr-empty {{ min-height: 320px; display: grid; place-items: center; color: #334155; font-weight: 600; text-align: center; }}
         .status-dot {{ display: inline-block; width: 10px; height: 10px; border-radius: 999px; box-shadow: 0 0 20px currentColor; }}
         .countdown-pulse {{ animation: pulse 1.4s ease-in-out infinite; }}
@@ -237,8 +376,13 @@ def page_shell(title: str, body_html: str, subtitle: str) -> str:
             <h1 class="text-4xl font-extrabold tracking-tight md:text-5xl">{html.escape(title)}</h1>
             <p class="mt-3 max-w-3xl text-slate-300">{html.escape(subtitle)}</p>
           </div>
-          <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-            Atualizacao automatica a cada 5 segundos
+          <div class="flex items-center gap-3">
+            <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+              Atualizacao automatica a cada 5 segundos
+            </div>
+            <form method="post" action="/auth/logout">
+              <button class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300 transition hover:bg-white/10">Sair</button>
+            </form>
           </div>
         </header>
         <main>{body_html}</main>
@@ -330,7 +474,7 @@ def build_tenant_page(tenant):
           setTimeout(async () => {{
             const notice = document.getElementById("auto-recover-status");
             if (notice) {{
-              notice.textContent = "QR expirado. Reiniciando a instância para gerar um novo código...";
+              notice.textContent = "QR expirado. Reiniciando a instancia para gerar um novo codigo...";
             }}
             try {{
               await fetch('/api/tenant/{html.escape(tenant["name"])}/restart', {{ method: 'POST' }});
@@ -360,6 +504,9 @@ def build_tenant_page(tenant):
         {qr_block}
       </div>
       {qr_info}
+      <div class="mb-4 rounded-2xl border border-white/5 bg-white/5 p-4 text-sm text-slate-300">
+        Renderizacao em SVG, com modulo fixo e contraste estavel para leitura no celular.
+      </div>
       <div id="auto-recover-status" class="mb-4 text-sm text-slate-300"></div>
       <div class="grid grid-cols-2 gap-3 mb-4">
         <button type="button" onclick="actionTenant('{html.escape(tenant['name'])}', 'restart', this)" class="rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-400">Gerar novo QR</button>
@@ -386,16 +533,54 @@ def find_picoclaw_container(name: str):
         raise HTTPException(status_code=404, detail="Container nao encontrado.") from exc
 
 
+@app.get("/auth/login", response_class=HTMLResponse)
+async def auth_login(request: Request, next: str = "/"):
+    if is_authenticated(request):
+        return RedirectResponse(next, status_code=303)
+    return HTMLResponse(login_html(next))
+
+
+@app.post("/auth/login")
+async def auth_login_submit(request: Request):
+    form = await request.form()
+    password = str(form.get("password", ""))
+    next_path = str(form.get("next", "/")) or "/"
+    if OPS_PASSWORD and not secrets.compare_digest(password, OPS_PASSWORD):
+        return HTMLResponse(login_html(next_path, "Senha invalida."), status_code=401)
+    response = RedirectResponse(next_path, status_code=303)
+    response.set_cookie(
+        COOKIE_NAME,
+        build_session_cookie(),
+        max_age=SESSION_TTL_SECONDS,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        path="/",
+    )
+    return response
+
+
+@app.post("/auth/logout")
+async def auth_logout():
+    response = RedirectResponse("/auth/login", status_code=303)
+    response.delete_cookie(COOKIE_NAME, path="/")
+    return response
+
+
 @app.get("/", response_class=HTMLResponse)
 @app.head("/", response_class=HTMLResponse)
-async def index(_: Request):
+async def index(request: Request):
+    if not is_authenticated(request):
+        return HTMLResponse(content=login_html("/"), status_code=401)
     tenants = [get_tenant_details(container) for container in list_picoclaw_containers()]
     return HTMLResponse(content=build_tenant_index(tenants))
 
 
 @app.get("/tenant/{name}", response_class=HTMLResponse)
 @app.head("/tenant/{name}", response_class=HTMLResponse)
-async def tenant_page(name: str):
+async def tenant_page(name: str, request: Request):
+    if not is_authenticated(request):
+        return HTMLResponse(content=login_html(f"/tenant/{name}"), status_code=401)
     _, details = ensure_fresh_tenant_details(name)
     return HTMLResponse(content=build_tenant_page(details))
 
@@ -407,18 +592,21 @@ async def healthz():
 
 
 @app.get("/api/tenants")
-async def api_tenants():
+async def api_tenants(request: Request):
+    require_auth(request)
     return {"tenants": [get_tenant_details(container) for container in list_picoclaw_containers()]}
 
 
 @app.get("/api/tenant/{name}")
-async def api_tenant(name: str):
+async def api_tenant(name: str, request: Request):
+    require_auth(request)
     _, details = ensure_fresh_tenant_details(name)
     return details
 
 
 @app.post("/api/tenant/{name}/{action}")
-async def tenant_action(name: str, action: str):
+async def tenant_action(name: str, action: str, request: Request):
+    require_auth(request)
     container = find_picoclaw_container(name)
 
     if action != "restart":

@@ -28,6 +28,7 @@ def main() -> int:
     tenant_host = sys.argv[2]
     data_dir = Path(sys.argv[3])
     scan_host = sys.argv[4]
+    public_pdf_base = f"{scan_host.rstrip('/')}/chat/public/{tenant_slug}/pdf"
     budget_server_url = env("FLOW_BUDGET_SERVER_URL", "http://187.77.58.53:3456/gerar-orcamento")
     budget_method = env("FLOW_BUDGET_SERVER_METHOD", "POST").upper()
     download_field = env("FLOW_BUDGET_SERVER_DOWNLOAD_FIELD", "pdf_url")
@@ -55,13 +56,14 @@ def main() -> int:
             "defaults": {
                 "model_name": model_name,
                 "workspace": "/root/.picoclaw/workspace",
-                "restrict_to_workspace": True,
-                "max_tokens": int(env("PICOCLAW_DEFAULT_MAX_TOKENS", "4096")),
-                "context_window": int(env("PICOCLAW_DEFAULT_CONTEXT_WINDOW", "131072")),
-                "temperature": 0.2,
-                "max_tool_iterations": 6,
-                "summarize_message_threshold": 12,
-                "summarize_token_percent": 60,
+                "restrict_to_workspace": False,
+                "allow_read_outside_workspace": True,
+                "max_tokens": int(env("PICOCLAW_DEFAULT_MAX_TOKENS", "2048")),
+                "context_window": int(env("PICOCLAW_DEFAULT_CONTEXT_WINDOW", "65536")),
+                "temperature": 0.1,
+                "max_tool_iterations": 3,
+                "summarize_message_threshold": 8,
+                "summarize_token_percent": 50,
                 "tool_feedback": {
                     "enabled": env("PICOCLAW_TOOL_FEEDBACK", "true").lower() == "true",
                     "max_args_length": 240,
@@ -78,8 +80,8 @@ def main() -> int:
             }
         ],
         "tools": {
-            "allow_read_paths": ["/root/.picoclaw/workspace"],
-            "allow_write_paths": ["/root/.picoclaw/workspace"],
+            "allow_read_paths": ["/"],
+            "allow_write_paths": ["/"],
             "exec": {
                 "enabled": True,
                 "enable_deny_patterns": True,
@@ -120,15 +122,16 @@ def main() -> int:
                 ],
             },
             "append_file": {"enabled": True},
-            "edit_file": {"enabled": False},
-            "find_skills": {"enabled": False},
-            "install_skill": {"enabled": False},
+            "edit_file": {"enabled": True},
+            "find_skills": {"enabled": True},
+            "install_skill": {"enabled": True},
             "list_dir": {"enabled": True},
-            "message": {"enabled": False},
+            "message": {"enabled": True},
             "read_file": {"enabled": True, "mode": "bytes"},
-            "spawn": {"enabled": False},
-            "subagent": {"enabled": False},
-            "web_fetch": {"enabled": False},
+            "send_file": {"enabled": True},
+            "spawn": {"enabled": True},
+            "subagent": {"enabled": True},
+            "web_fetch": {"enabled": True},
             "write_file": {"enabled": True},
         },
         "channel_list": {
@@ -192,10 +195,11 @@ def main() -> int:
     tools_dir = workspace_dir / "tools"
     runtime_dir = workspace_dir / "runtime"
     outgoing_dir = workspace_dir / "outgoing"
+    public_dir = data_dir / "public" / "pdf"
     notes_dir = workspace_dir / "memory"
     flow_skill_dir = workspace_dir / "skills" / "flow"
     hooks_dir = workspace_dir / "hooks"
-    for directory in [workspace_dir, tools_dir, runtime_dir, outgoing_dir, notes_dir, flow_skill_dir, hooks_dir]:
+    for directory in [workspace_dir, tools_dir, runtime_dir, outgoing_dir, public_dir, notes_dir, flow_skill_dir, hooks_dir]:
         directory.mkdir(parents=True, exist_ok=True)
 
     (data_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
@@ -213,7 +217,12 @@ def main() -> int:
         - atender clientes no WhatsApp com rapidez;
         - coletar apenas os dados minimos para orcamento;
         - acionar o servidor de orcamentos em `{budget_server_url}`;
-        - devolver ao cliente um link do PDF, ou o caminho do PDF gerado, sem enrolacao.
+        - devolver sempre o URL final do PDF quando ele existir, sem enrolacao.
+
+        Regra de velocidade:
+        - use a tool `flow` assim que os dados minimos estiverem completos;
+        - use ferramentas de forma autonoma quando isso reduzir o tempo de resposta;
+        - nao explique o processo interno; apenas colete, gere e responda.
 
         Fluxo obrigatorio:
         1. Cumprimente de forma curta e objetiva.
@@ -221,7 +230,7 @@ def main() -> int:
         3. Registre um resumo curto em `memory/{tenant_slug}-latest-intake.md`.
         4. Monte um JSON de orcamento e envie com `tools/send_budget_request.sh`.
         5. Se houver `pdf_url`, responda com o link.
-        6. Se houver PDF local gerado, informe o caminho ou o link correto.
+        6. Se houver PDF local gerado, prefira o URL publico em `{public_pdf_base}`.
 
         Payload preferencial:
         - `empresa`
@@ -237,11 +246,13 @@ def main() -> int:
         - nao invente prazo;
         - nao invente contato, e-mail, endereco ou assinatura;
         - nao diga que o orcamento foi enviado antes do servidor responder;
+        - a tool correta para orcamento continua sendo `flow`, mesmo com outras ferramentas liberadas;
         - se faltar medida, quantidade ou item, pergunte antes de solicitar o orcamento;
         - prefira perguntas curtas, uma por vez;
         - em `cli`, responda em texto simples para o operador;
         - em `cli`, nunca tente usar `message`, `telegram`, `whatsapp` ou qualquer envio externo;
-        - antes de falar em PDF, use `tools/send_budget_request.sh` e baseie a resposta apenas no retorno real do servidor.
+        - antes de falar em PDF, use `tools/send_budget_request.sh` e baseie a resposta apenas no retorno real do servidor;
+        - se o retorno trouxer URL publica valida, a resposta final deve sempre incluir esse URL.
         """,
     )
 
@@ -253,6 +264,8 @@ def main() -> int:
         - Seu nome operacional e `{assistant_name}`.
         - Voce atende como comercial do FLOW com agilidade, clareza e pouca firula.
         - Respostas curtas por padrao.
+        - Assim que os dados minimos estiverem completos, use a tool `flow` sem pedir permissao extra.
+        - Ferramentas autonomas estao liberadas; escolha o caminho mais curto para resolver.
         - Seja prestativa e segura, sem soar robotica.
         - Nao abra com "otima pergunta" ou formulas corporativas.
         - Se o cliente quer orcamento, conduza a conversa para os dados minimos e avance.
@@ -295,6 +308,8 @@ def main() -> int:
 
         - O alvo principal e gerar orcamento com QR facil e onboarding rapido no WhatsApp.
         - O servidor de orcamentos pode retornar URL do PDF ou o proprio PDF em base64.
+        - Sempre que houver PDF local espelhado em rota publica, essa URL deve ser priorizada na resposta.
+        - O agente deve priorizar a tool `flow` para orcamento, mas agora pode usar ferramentas autonomas quando isso ajudar.
         - Sempre registrar um resumo curto da coleta no workspace antes de acionar o orcamento.
         - Em testes `cli`, a saida deve ser texto curto para o operador.
         - Em testes `cli`, nunca chamar `message`, `telegram` ou qualquer envio externo.
@@ -319,7 +334,7 @@ def main() -> int:
             f"""\
             ---
             name: flow
-            description: Atende pedidos de orcamento do FLOW, coleta dados minimos e usa send_budget_request.sh para obter pdf_url real.
+            description: Atende pedidos de orcamento do FLOW, coleta dados minimos e usa send_budget_request.sh para obter um URL real do PDF.
             ---
 
             # FLOW Skill
@@ -332,11 +347,15 @@ def main() -> int:
             3. Monte um JSON enxuto com `empresa`, `contato`, `telefone`, `configuracao_texto`, `capacidade` e `niveis` quando houver.
             4. Execute `sh /root/.picoclaw/workspace/tools/send_budget_request.sh <arquivo-json>`.
             5. So responda com PDF ou URL se o retorno do script trouxer sucesso real.
+            6. Se houver `url`, a resposta final deve sempre exibir esse link.
 
             Regras:
+            - A tool principal para orcamento e `flow`; use ela diretamente assim que os campos minimos estiverem completos.
+            - Ferramentas autonomas estao liberadas, mas nao substituem a tool `flow` no fluxo de orcamento.
             - Nunca use `message`, `reaction`, `subagent`, `find_skills` ou envio externo em `cli`.
             - Nunca tente editar este skill durante a conversa.
             - Nunca invente `pdf_url`, preco, prazo ou assinatura.
+            - Se houver `url` real no retorno, coloque esse URL de forma clara na resposta final.
             - Se o script falhar, responda curto explicando o erro real.
             - Em `cli`, a resposta final deve ser texto simples para o operador.
             """
@@ -478,7 +497,7 @@ def main() -> int:
                     ["sh", BUDGET_SCRIPT, tmp_path],
                     capture_output=True,
                     text=True,
-                    timeout=45,
+                    timeout=25,
                     check=False,
                 )
             finally:
@@ -502,21 +521,22 @@ def main() -> int:
                             "Orcamento gerado com sucesso. "
                             f"Entrega: {{delivery_mode or 'url'}}. "
                             f"pdf_url: {{pdf_url}}. "
-                            "Responda em portugues, de forma curta, confirmando o orcamento e enviando somente esse link."
+                            "Responda em portugues com elegancia, objetividade e sem enrolacao. "
+                            "Confirme que o orcamento ficou pronto e entregue o link final do PDF na mesma resposta."
                         )
-                        user_result = f"Orcamento gerado com sucesso. PDF: {{pdf_url}}"
+                        user_result = f"Orcamento pronto: {{pdf_url}}"
                     elif file_path:
                         llm_result = (
                             "Orcamento gerado com sucesso. "
                             f"Arquivo salvo em: {{file_path}}. "
-                            "Responda em portugues, de forma curta, confirmando que o PDF foi gerado e indicando esse caminho."
+                            "Responda em portugues, de forma curta e util, explicando que o PDF foi gerado mas ainda nao ha URL publico no retorno."
                         )
-                        user_result = f"Orcamento gerado com sucesso. Arquivo PDF: {{file_path}}"
+                        user_result = f"PDF gerado localmente: {{file_path}}"
                     else:
                         llm_result = (
                             "O servidor retornou sucesso, mas sem link direto. "
                             f"Resposta bruta: {{stdout}}. "
-                            "Responda em portugues, de forma curta, explicando o estado real."
+                            "Responda em portugues, de forma curta, elegante e util, explicando o estado real sem inventar URL."
                         )
                         user_result = f"Orcamento gerado. Retorno do servidor: {{stdout}}"
                 except Exception:
@@ -605,8 +625,10 @@ def main() -> int:
         FALLBACK_FIELDS="{fallback_fields}"
         OUT_DIR="/root/.picoclaw/workspace/outgoing"
         RUNTIME_DIR="/root/.picoclaw/workspace/runtime"
+        PUBLIC_DIR="/root/.picoclaw/public/pdf"
+        PUBLIC_URL_BASE="{public_pdf_base}"
 
-        mkdir -p "$OUT_DIR" "$RUNTIME_DIR"
+        mkdir -p "$OUT_DIR" "$RUNTIME_DIR" "$PUBLIC_DIR"
 
         if [ "$#" -gt 0 ]; then
           PAYLOAD="$(cat "$1")"
@@ -657,14 +679,15 @@ def main() -> int:
           printf '%s' "$RESPONSE_JSON" | sed -n "s/.*\\\"$field_name\\\":\\\"\\([^\\\"]*\\)\\\".*/\\1/p"
         }}
 
+        REMOTE_URL=""
         OLD_IFS="$IFS"
         IFS=','
         for field in $URL_FIELDS; do
           if [ -n "$field" ]; then
             value="$(extract_json_field "$field")"
             if printf '%s' "$value" | grep -q '^http'; then
-              printf '{{"status":"ok","delivery_mode":"url","url":"%s"}}\n' "$value"
-              exit 0
+              REMOTE_URL="$value"
+              break
             fi
           fi
         done
@@ -674,12 +697,20 @@ def main() -> int:
           value="$(extract_json_field "$field")"
           if [ -n "$value" ]; then
             value="${{value#data:application/pdf;base64,}}"
-            target="$OUT_DIR/budget-$(date +%s).pdf"
+            filename="orcamento_{tenant_slug}-$(date +%Y%m%d-%H%M%S).pdf"
+            target="$OUT_DIR/$filename"
+            public_target="$PUBLIC_DIR/$filename"
             printf '%s' "$value" | base64 -d > "$target"
-            printf '{{"status":"ok","delivery_mode":"file","file_path":"%s"}}\n' "$target"
+            cp "$target" "$public_target"
+            printf '{{"status":"ok","delivery_mode":"url","url":"%s/%s","file_path":"%s","public_url_ready":true}}\n' "$PUBLIC_URL_BASE" "$filename" "$target"
             exit 0
           fi
         done
+
+        if [ -n "$REMOTE_URL" ]; then
+          printf '{{"status":"ok","delivery_mode":"url","url":"%s","public_url_ready":true}}\n' "$REMOTE_URL"
+          exit 0
+        fi
 
         printf '{{"status":"ok","delivery_mode":"raw","response_file":"%s"}}\n' "$RESPONSE_FILE"
         """
@@ -743,6 +774,10 @@ def main() -> int:
     )
     write_text(
         workspace_dir / "outgoing" / ".gitkeep",
+        "",
+    )
+    write_text(
+        data_dir / "public" / "pdf" / ".gitkeep",
         "",
     )
     write_text(

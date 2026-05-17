@@ -228,6 +228,8 @@ services:
     environment:
       QR_SCANNER_CONTAINER_PREFIX: ${QR_SCANNER_CONTAINER_PREFIX:-picoclaw-}
       QR_SCANNER_SITE_TITLE: ${QR_SCANNER_SITE_TITLE:-AXION QR Dashboard}
+      AXION_OPS_PASSWORD: ${AXION_OPS_PASSWORD:-${TENANT_ADMIN_TOKEN}}
+      AXION_OPS_SESSION_SECRET: ${AXION_OPS_SESSION_SECRET:-${TENANT_ADMIN_TOKEN}}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
@@ -251,6 +253,8 @@ services:
     mem_limit: ${TENANT_CHAT_MEM_LIMIT:-160m}
     cpus: ${TENANT_CHAT_CPUS:-0.20}
     networks: [edge, tenants]
+    ports:
+      - "${TENANT_CHAT_PUBLIC_BIND:-0.0.0.0:8010}:8010"
     environment:
       TENANT_CHAT_SITE_TITLE: ${TENANT_CHAT_SITE_TITLE:-AXION Tenant Chat}
       TENANT_CHAT_PICO_TOKEN: ${TENANT_CHAT_PICO_TOKEN:-${TENANT_ADMIN_TOKEN}}
@@ -258,8 +262,12 @@ services:
       TENANT_CHAT_TENANT_SUFFIX: .flow.${BASE_DOMAIN}
       TENANT_CHAT_CONTAINER_PREFIX: ${QR_SCANNER_CONTAINER_PREFIX:-picoclaw-}
       TENANT_CHAT_SCAN_HOST: https://scan.${BASE_DOMAIN}
+      AXION_TENANTS_ROOT: ${AXION_ROOT}/tenants
+      AXION_OPS_PASSWORD: ${AXION_OPS_PASSWORD:-${TENANT_ADMIN_TOKEN}}
+      AXION_OPS_SESSION_SECRET: ${AXION_OPS_SESSION_SECRET:-${TENANT_ADMIN_TOKEN}}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${AXION_ROOT}/tenants:${AXION_ROOT}/tenants:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8010/healthz"]
       interval: 20s
@@ -274,6 +282,41 @@ services:
       - traefik.http.routers.tenant-chat.priority=110
       - traefik.http.routers.tenant-chat.middlewares=chain-ops@file
       - traefik.http.services.tenant-chat.loadbalancer.server.port=8010
+
+  cf-workers-proxy:
+    build:
+      context: ../infra/cf-workers-proxy
+    restart: unless-stopped
+    profiles: ["cloudflare-ai"]
+    mem_limit: 128m
+    cpus: 0.20
+    networks: [internal, tenants]
+    environment:
+      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID}
+      CF_API_TOKEN: ${CF_API_TOKEN}
+      CF_WORKERS_MODEL: ${CF_WORKERS_MODEL:-@cf/meta/llama-3.1-8b-instruct}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"from urllib.request import urlopen; raise SystemExit(0 if urlopen('http://127.0.0.1:8020/healthz').status == 200 else 1)\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  ollama-openai-proxy:
+    build:
+      context: ../infra/ollama-openai-proxy
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.20
+    networks: [internal, tenants]
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://172.20.0.1:11434/v1}
+      OLLAMA_PROXY_DEFAULT_MODEL: ${PICOCLAW_UPSTREAM_MODEL:-qwen2.5:1.5b}
+      OLLAMA_PROXY_TIMEOUT_SECONDS: ${PICOCLAW_REQUEST_TIMEOUT:-300}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"from urllib.request import urlopen; raise SystemExit(0 if urlopen('http://127.0.0.1:8021/healthz').status == 200 else 1)\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
 
   picoclaw-official:
     build:
@@ -291,6 +334,20 @@ services:
     command: ["gateway"]
     volumes:
       - ${AXION_ROOT}/tenants/axion-official/data:/root/.picoclaw
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=axion_tenants
+      - traefik.http.routers.picoclaw-official-core.rule=Host(`core.flow.${BASE_DOMAIN}`)
+      - traefik.http.routers.picoclaw-official-core.entrypoints=websecure
+      - traefik.http.routers.picoclaw-official-core.tls=true
+      - traefik.http.routers.picoclaw-official-core.middlewares=chain-public@file
+      - traefik.http.routers.picoclaw-official-core.service=picoclaw-official
+      - traefik.http.routers.picoclaw-official-flow.rule=Host(`flow.${BASE_DOMAIN}`)
+      - traefik.http.routers.picoclaw-official-flow.entrypoints=websecure
+      - traefik.http.routers.picoclaw-official-flow.tls=true
+      - traefik.http.routers.picoclaw-official-flow.middlewares=chain-public@file
+      - traefik.http.routers.picoclaw-official-flow.service=picoclaw-official
+      - traefik.http.services.picoclaw-official.loadbalancer.server.port=${PICOCLAW_GATEWAY_PORT:-18790}
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:18790/health | grep -q '\"status\":\"ok\"'"]
       interval: 20s

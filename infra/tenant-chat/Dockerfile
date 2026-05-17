@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir \
     aiohttp==3.12.15 \
     docker==7.1.0 \
     fastapi==0.116.1 \
+    python-multipart==0.0.20 \
     uvicorn==0.35.0 \
     websockets==15.0.1
 

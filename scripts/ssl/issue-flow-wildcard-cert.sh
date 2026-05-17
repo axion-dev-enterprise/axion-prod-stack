@@ -19,6 +19,7 @@ certbot certonly \
   --pre-hook "docker stop axion-platform-traefik-1 || true" \
   --post-hook "docker start axion-platform-traefik-1 || true" \
   --cert-name flow-tenants.axionenterprise.cloud \
+  -d flow.axionenterprise.cloud \
   -d core.flow.axionenterprise.cloud \
   -d sales.flow.axionenterprise.cloud \
   -d support.flow.axionenterprise.cloud

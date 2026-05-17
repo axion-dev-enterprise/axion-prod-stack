@@ -18,19 +18,8 @@ read_env_value() {
   printf '%s' "${value:-}"
 }
 
-TENANT_SLUG="${1:-}"
-TENANT_HOST="${2:-}"
-
-if [[ -z "$TENANT_SLUG" ]]; then
-  echo "usage: $0 <tenant-slug> [tenant-host]" >&2
-  exit 1
-fi
-
-if [[ -z "$TENANT_HOST" ]]; then
-  TENANT_HOST="${TENANT_SLUG}.$(read_env_value TENANT_BASE_DOMAIN)"
-fi
-
 AXION_ROOT_VALUE="$(read_env_value AXION_ROOT)"
+TENANT_BASE_DOMAIN_VALUE="$(read_env_value TENANT_BASE_DOMAIN)"
 PICOCLAW_IMAGE_VALUE="$(read_env_value PICOCLAW_IMAGE)"
 PICOCLAW_GATEWAY_PORT_VALUE="$(read_env_value PICOCLAW_GATEWAY_PORT)"
 PICOCLAW_TENANT_MEM_LIMIT_VALUE="$(read_env_value PICOCLAW_TENANT_MEM_LIMIT)"
@@ -61,40 +50,55 @@ export \
   PICOCLAW_TENANT_CPUS="${PICOCLAW_TENANT_CPUS_VALUE:-0.70}" \
   PICOCLAW_GATEWAY_PORT="${PICOCLAW_GATEWAY_PORT_VALUE:-18790}"
 
-TENANT_DIR="${AXION_ROOT_VALUE}/tenants/${TENANT_SLUG}"
-DATA_DIR="${TENANT_DIR}/data"
-WORKSPACE_DIR="${DATA_DIR}/workspace"
+shopt -s nullglob
+for tenant_dir in "${AXION_ROOT_VALUE}"/tenants/*; do
+  tenant_slug="$(basename "$tenant_dir")"
+  if [[ ! "$tenant_slug" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]]; then
+    echo "skip invalid tenant directory: $tenant_dir" >&2
+    continue
+  fi
 
-mkdir -p "$DATA_DIR" "$WORKSPACE_DIR"
+  tenant_host="$(grep -E '^TENANT_HOST=' "$tenant_dir/tenant.env" 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
+  tenant_host="${tenant_host%\"}"
+  tenant_host="${tenant_host#\"}"
+  if [[ -z "$tenant_host" ]]; then
+    tenant_host="${tenant_slug}.${TENANT_BASE_DOMAIN_VALUE}"
+  fi
 
-export TENANT_SLUG TENANT_HOST
+  data_dir="${tenant_dir}/data"
+  workspace_dir="${data_dir}/workspace"
+  mkdir -p "$data_dir" "$workspace_dir"
 
-python3 "$ROOT_DIR/scripts/tenants/render_picoclaw_config.py" \
-  "$TENANT_SLUG" \
-  "$TENANT_HOST" \
-  "${DATA_DIR}/config.json"
+  export TENANT_SLUG="$tenant_slug" TENANT_HOST="$tenant_host"
 
-python3 "$ROOT_DIR/scripts/tenants/render_local_knowledge_workspace.py" \
-  "$TENANT_SLUG" \
-  "$WORKSPACE_DIR"
+  python3 "$ROOT_DIR/scripts/tenants/render_picoclaw_config.py" \
+    "$tenant_slug" \
+    "$tenant_host" \
+    "${data_dir}/config.json"
 
-cat > "${TENANT_DIR}/tenant.env" <<EOF
-TENANT_SLUG=${TENANT_SLUG}
-TENANT_HOST=${TENANT_HOST}
+  python3 "$ROOT_DIR/scripts/tenants/render_local_knowledge_workspace.py" \
+    "$tenant_slug" \
+    "$workspace_dir"
+
+  cat > "${tenant_dir}/tenant.env" <<EOF
+TENANT_SLUG=${tenant_slug}
+TENANT_HOST=${tenant_host}
 PICOCLAW_IMAGE=${PICOCLAW_IMAGE_VALUE}
 PICOCLAW_GATEWAY_PORT=${PICOCLAW_GATEWAY_PORT_VALUE:-18790}
 PICOCLAW_TENANT_MEM_LIMIT=${PICOCLAW_TENANT_MEM_LIMIT_VALUE:-768m}
 PICOCLAW_TENANT_CPUS=${PICOCLAW_TENANT_CPUS_VALUE:-0.70}
 EOF
 
-envsubst < "$ROOT_DIR/templates/picoclaw/docker-compose.tenant.yml" > "${TENANT_DIR}/docker-compose.yml"
+  envsubst < "$ROOT_DIR/templates/picoclaw/docker-compose.tenant.yml" > "${tenant_dir}/docker-compose.yml"
 
-docker compose \
-  --env-file "${TENANT_DIR}/tenant.env" \
-  -f "${TENANT_DIR}/docker-compose.yml" \
-  up -d
+  docker compose \
+    --env-file "${tenant_dir}/tenant.env" \
+    -f "${tenant_dir}/docker-compose.yml" \
+    up -d
 
-docker compose \
-  --env-file "${TENANT_DIR}/tenant.env" \
-  -f "${TENANT_DIR}/docker-compose.yml" \
-  ps
+  if [[ -x "${workspace_dir}/tools/refresh_memory.sh" ]]; then
+    docker exec "picoclaw-${tenant_slug}" sh -lc "sh /root/.picoclaw/workspace/tools/refresh_memory.sh" >/dev/null || true
+  fi
+
+  echo "reconciled ${tenant_slug} -> ${tenant_host}"
+done

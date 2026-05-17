@@ -21,6 +21,11 @@ services:
       - traefik.http.routers.picoclaw-${TENANT_SLUG}.entrypoints=websecure
       - traefik.http.routers.picoclaw-${TENANT_SLUG}.tls=true
       - traefik.http.routers.picoclaw-${TENANT_SLUG}.middlewares=chain-public@file
+      - traefik.http.routers.picoclaw-${TENANT_SLUG}-legacy.rule=Host(`siebraflow.axionenterprise.cloud`)
+      - traefik.http.routers.picoclaw-${TENANT_SLUG}-legacy.entrypoints=websecure
+      - traefik.http.routers.picoclaw-${TENANT_SLUG}-legacy.tls=true
+      - traefik.http.routers.picoclaw-${TENANT_SLUG}-legacy.middlewares=chain-public@file
+      - traefik.http.routers.picoclaw-${TENANT_SLUG}-legacy.service=picoclaw-${TENANT_SLUG}
       - traefik.http.services.picoclaw-${TENANT_SLUG}.loadbalancer.server.port=${PICOCLAW_GATEWAY_PORT}
 
 networks:
